@@ -1,0 +1,4 @@
+/* Basic admin styles */
+.ksm-meta-box { padding: 10px; }
+.ksm-color-row { margin: 10px 0; display: flex; gap: 10px; align-items: center; }
+.ksm-color-preview { margin-top: 20px; }

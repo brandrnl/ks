@@ -1,5 +1,5 @@
 /**
- * Kleurstalen Manager Frontend JavaScript
+ * Kleurstalen Manager Frontend JavaScript - FIXED VERSION
  */
 
 (function($) {
@@ -12,11 +12,18 @@
         selectedCategory: null,
         selectedSamples: [],
         maxSamples: parseInt(ksm_ajax.max_samples) || 10,
+        isOpen: false,
         
         // Initialize
         init: function() {
-            this.cacheDom();
-            this.bindEvents();
+            var self = this;
+            
+            // Wait for DOM ready
+            $(document).ready(function() {
+                self.cacheDom();
+                self.bindEvents();
+                console.log('KSM: Initialized');
+            });
         },
         
         // Cache DOM elements
@@ -30,70 +37,89 @@
             this.checkoutBtn = $('#ksm-checkout');
             this.continueBtn = $('#ksm-continue-shopping');
             this.notification = $('#ksm-notification');
+            
+            console.log('KSM: DOM cached, popup found:', this.popup.length > 0);
         },
         
         // Bind events
         bindEvents: function() {
             var self = this;
             
-            // Open popup buttons
-            $(document).on('click', '.ksm-open-popup, .ksm-button', function(e) {
+            // Open popup buttons - use delegation for dynamic content
+            $(document).on('click', '.ksm-open-popup, .ksm-button, [data-ksm-popup]', function(e) {
                 e.preventDefault();
+                e.stopPropagation();
+                console.log('KSM: Button clicked');
                 var category = $(this).data('category');
                 self.openPopup(category);
             });
             
-            // Close popup
-            this.closeBtn.on('click', function() {
+            // Close popup - click on X button
+            $(document).on('click', '.ksm-popup-close', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('KSM: Close button clicked');
                 self.closePopup();
             });
             
-            this.overlay.on('click', function() {
+            // Close popup - click on overlay
+            $(document).on('click', '.ksm-popup-overlay', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('KSM: Overlay clicked');
                 self.closePopup();
             });
             
-            // ESC key
+            // ESC key to close
             $(document).on('keydown', function(e) {
-                if (e.keyCode === 27 && self.popup.hasClass('active')) {
+                if (e.keyCode === 27 && self.isOpen) {
                     self.closePopup();
                 }
             });
             
             // Category selection
-            this.categoryCards.on('click', function() {
+            $(document).on('click', '.ksm-category-card', function(e) {
+                e.preventDefault();
                 var categoryId = $(this).data('category');
                 var categoryName = $(this).data('name');
+                console.log('KSM: Category selected:', categoryId);
                 self.selectCategory(categoryId, categoryName);
             });
             
             // Back buttons
-            this.backButtons.on('click', function() {
+            $(document).on('click', '.ksm-back-button', function(e) {
+                e.preventDefault();
                 var target = $(this).data('target');
                 self.goToStep(target);
             });
             
-            // Sample selection (delegated)
-            $(document).on('click', '.ksm-sample-item', function() {
+            // Sample selection
+            $(document).on('click', '.ksm-sample-item', function(e) {
+                e.preventDefault();
                 self.toggleSample($(this));
             });
             
             // Add to cart
-            this.addToCartBtn.on('click', function() {
+            $(document).on('click', '#ksm-add-to-cart', function(e) {
+                e.preventDefault();
                 self.addToCart();
             });
             
             // Checkout
-            this.checkoutBtn.on('click', function() {
+            $(document).on('click', '#ksm-checkout', function(e) {
+                e.preventDefault();
                 window.location.href = ksm_ajax.checkout_url;
             });
             
             // Continue shopping
-            this.continueBtn.on('click', function() {
+            $(document).on('click', '#ksm-continue-shopping', function(e) {
+                e.preventDefault();
                 self.showStep(2);
             });
             
             // Remove from cart
-            $(document).on('click', '.ksm-cart-item-remove', function() {
+            $(document).on('click', '.ksm-cart-item-remove', function(e) {
+                e.preventDefault();
                 var sampleId = $(this).data('sample-id');
                 self.removeFromCart(sampleId);
             });
@@ -101,23 +127,195 @@
         
         // Open popup
         openPopup: function(preselectedCategory) {
-            this.popup.addClass('active');
-            $('body').css('overflow', 'hidden');
+            var self = this;
             
+            console.log('KSM: Opening popup...');
+            
+            // Check if popup exists
+            if (this.popup.length === 0) {
+                console.error('KSM: Popup element not found! Creating dynamically...');
+                this.createPopupHTML();
+                this.cacheDom(); // Re-cache DOM after creating popup
+            }
+            
+            // Show popup
+            this.popup.show().addClass('active');
+            $('body').addClass('ksm-popup-open').css('overflow', 'hidden');
+            this.isOpen = true;
+            
+            // Show correct step
             if (preselectedCategory) {
-                // If category is preselected, go directly to samples
                 this.selectCategory(preselectedCategory, '');
             } else {
-                // Show category selection
                 this.showStep(1);
             }
+            
+            console.log('KSM: Popup opened');
         },
         
         // Close popup
         closePopup: function() {
+            console.log('KSM: Closing popup...');
+            
             this.popup.removeClass('active');
-            $('body').css('overflow', 'auto');
+            $('body').removeClass('ksm-popup-open').css('overflow', '');
+            this.isOpen = false;
+            
+            // Hide after animation
+            setTimeout(() => {
+                this.popup.hide();
+            }, 300);
+            
             this.resetSelection();
+            console.log('KSM: Popup closed');
+        },
+        
+        // Create popup HTML if not exists
+        createPopupHTML: function() {
+            var html = `
+            <div id="ksm-popup" class="ksm-popup" style="display: none;">
+                <div class="ksm-popup-overlay"></div>
+                <div class="ksm-popup-container">
+                    <button class="ksm-popup-close" aria-label="Sluiten">
+                        <span>&times;</span>
+                    </button>
+                    
+                    <!-- Step 1: Category Selection -->
+                    <div class="ksm-popup-step" id="ksm-step-category" data-step="1">
+                        <div class="ksm-popup-header">
+                            <h2>Kies je materiaal</h2>
+                            <p>Selecteer het type jaloezie waarvan je kleurstalen wilt ontvangen</p>
+                        </div>
+                        <div class="ksm-category-grid">
+                            <p>Laden...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2: Samples Selection -->
+                    <div class="ksm-popup-step" id="ksm-step-samples" data-step="2" style="display: none;">
+                        <div class="ksm-popup-header">
+                            <button class="ksm-back-button" data-target="category">
+                                <span>&larr;</span> Terug
+                            </button>
+                            <h2><span id="ksm-category-title"></span></h2>
+                            <p>Selecteer de gewenste kleurstalen</p>
+                        </div>
+                        <div class="ksm-samples-grid" id="ksm-samples-container">
+                            <!-- Samples will be loaded here -->
+                        </div>
+                        <div class="ksm-popup-footer">
+                            <div class="ksm-selection-info">
+                                <span class="ksm-selected-count">0</span> geselecteerd
+                            </div>
+                            <button class="ksm-btn ksm-btn-primary" id="ksm-add-to-cart" disabled>
+                                Toevoegen aan winkelwagen
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: Cart Overview -->
+                    <div class="ksm-popup-step" id="ksm-step-cart" data-step="3" style="display: none;">
+                        <div class="ksm-popup-header">
+                            <button class="ksm-back-button" data-target="samples">
+                                <span>&larr;</span> Terug
+                            </button>
+                            <h2>Winkelwagen</h2>
+                            <p>Overzicht van je geselecteerde kleurstalen</p>
+                        </div>
+                        <div class="ksm-cart-content" id="ksm-cart-container">
+                            <!-- Cart items will be loaded here -->
+                        </div>
+                        <div class="ksm-popup-footer">
+                            <div class="ksm-cart-total">
+                                <span>Totaal:</span>
+                                <strong id="ksm-cart-total">€0,00</strong>
+                            </div>
+                            <div class="ksm-cart-actions">
+                                <button class="ksm-btn ksm-btn-secondary" id="ksm-continue-shopping">
+                                    Verder winkelen
+                                </button>
+                                <button class="ksm-btn ksm-btn-primary" id="ksm-checkout">
+                                    Afrekenen
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div class="ksm-loading" id="ksm-loading" style="display: none;">
+                        <div class="ksm-spinner"></div>
+                        <p>Laden...</p>
+                    </div>
+                </div>
+            </div>`;
+            
+            $('body').append(html);
+            console.log('KSM: Popup HTML created');
+            
+            // Load categories
+            this.loadCategories();
+        },
+        
+        // Load categories via AJAX
+        loadCategories: function() {
+            var self = this;
+            
+            $.ajax({
+                url: ksm_ajax.ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'ksm_get_categories',
+                    nonce: ksm_ajax.nonce
+                },
+                success: function(response) {
+                    if (response.success && response.data) {
+                        self.renderCategories(response.data);
+                    }
+                },
+                error: function() {
+                    console.error('KSM: Failed to load categories');
+                }
+            });
+        },
+        
+        // Render categories
+        renderCategories: function(categories) {
+            var html = '';
+            
+            console.log('KSM: Rendering categories:', categories);
+            
+            if (!categories || categories.length === 0) {
+                html = '<p style="text-align: center; padding: 40px;">Geen categorieën beschikbaar. Maak eerst categorieën aan in de admin.</p>';
+            } else {
+                categories.forEach(function(category) {
+                    html += '<div class="ksm-category-card" data-category="' + category.id + '" data-name="' + category.name + '">';
+                    
+                    // Show image if available
+                    if (category.image) {
+                        html += '<div class="ksm-category-image">';
+                        html += '<img src="' + category.image + '" alt="' + category.name + '" style="width: 100%; height: 100%; object-fit: cover;">';
+                        html += '</div>';
+                    } else {
+                        // Default icon
+                        html += '<div class="ksm-category-placeholder">';
+                        html += '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
+                        html += '<rect x="3" y="3" width="18" height="18" rx="2"/>';
+                        html += '</svg>';
+                        html += '</div>';
+                    }
+                    
+                    html += '<h3>' + category.name + '</h3>';
+                    
+                    if (category.description) {
+                        html += '<p>' + category.description + '</p>';
+                    }
+                    
+                    html += '<span class="ksm-category-count">' + category.count + ' kleurstalen</span>';
+                    html += '</div>';
+                });
+            }
+            
+            $('.ksm-category-grid').html(html);
         },
         
         // Show step
@@ -159,6 +357,8 @@
         selectCategory: function(categoryId, categoryName) {
             var self = this;
             
+            console.log('KSM: Selecting category:', categoryId, categoryName);
+            
             this.selectedCategory = categoryId;
             $('#ksm-category-title').text(categoryName);
             
@@ -169,35 +369,51 @@
             $.ajax({
                 url: ksm_ajax.ajax_url,
                 type: 'POST',
+                dataType: 'json',
                 data: {
                     action: 'ksm_get_samples',
                     category_id: categoryId,
                     nonce: ksm_ajax.nonce
                 },
                 success: function(response) {
+                    console.log('KSM: Samples response:', response);
                     self.hideLoading();
                     
-                    if (response.success) {
-                        self.renderSamples(response.data.samples);
-                        self.showStep(2);
+                    if (response && response.success) {
+                        if (response.data && response.data.samples) {
+                            self.renderSamples(response.data.samples);
+                            self.showStep(2);
+                        } else {
+                            console.error('KSM: No samples in response');
+                            self.showNotification('Geen kleurstalen gevonden in deze categorie', 'warning');
+                            // Still show step 2 but with empty message
+                            self.renderSamples([]);
+                            self.showStep(2);
+                        }
                     } else {
-                        self.showNotification(response.data || ksm_ajax.strings.error, 'error');
+                        console.error('KSM: Error response:', response);
+                        self.showNotification(response.data || 'Er ging iets mis bij het laden van de kleurstalen', 'error');
                     }
                 },
-                error: function() {
+                error: function(xhr, status, error) {
+                    console.error('KSM: AJAX error:', status, error);
+                    console.error('KSM: Response text:', xhr.responseText);
                     self.hideLoading();
-                    self.showNotification(ksm_ajax.strings.error, 'error');
+                    self.showNotification('Er ging iets mis bij het laden van de kleurstalen. Probeer het opnieuw.', 'error');
                 }
             });
         },
         
         // Render samples
         renderSamples: function(samples) {
+            var self = this;
             var container = $('#ksm-samples-container');
             container.empty();
             
-            if (samples.length === 0) {
-                container.html('<p>Geen kleurstalen beschikbaar in deze categorie.</p>');
+            console.log('KSM: Rendering samples:', samples);
+            
+            if (!samples || samples.length === 0) {
+                container.html('<p style="text-align: center; padding: 40px;">Geen kleurstalen beschikbaar in deze categorie.</p>');
                 return;
             }
             
@@ -211,16 +427,21 @@
         
         // Create sample HTML
         createSampleHtml: function(sample) {
-            var html = '<div class="ksm-sample-item" data-sample-id="' + sample.id + '">';
+            var html = '<div class="ksm-sample-item" data-sample-id="' + sample.id + '" data-price="' + (sample.price || 0) + '">';
             
             // Popular badge
             if (sample.popular) {
                 html += '<span class="ksm-sample-popular">★ Populair</span>';
             }
             
-            // Colors
+            // Visual display
             html += '<div class="ksm-sample-colors">';
-            if (sample.colors && sample.colors.length > 0) {
+            
+            // Check for images first
+            if (sample.images && sample.images.length > 0) {
+                html += '<img src="' + sample.images[0] + '" alt="' + sample.title + '" style="width: 100%; height: 100%; object-fit: cover;">';
+            } else if (sample.colors && sample.colors.length > 0) {
+                // Show colors
                 if (sample.colors.length > 1) {
                     var gradient = 'linear-gradient(135deg, ' + sample.colors.join(', ') + ')';
                     html += '<div class="ksm-sample-gradient" style="background: ' + gradient + ';"></div>';
@@ -230,6 +451,7 @@
             } else if (sample.thumbnail) {
                 html += '<img src="' + sample.thumbnail + '" alt="' + sample.title + '">';
             }
+            
             html += '</div>';
             
             // Title and SKU
@@ -238,14 +460,22 @@
                 html += '<div class="ksm-sample-sku">' + sample.sku + '</div>';
             }
             
+            // Price display
+            if (sample.price_formatted) {
+                html += '<div class="ksm-sample-price">' + sample.price_formatted + '</div>';
+            } else if (sample.price) {
+                html += '<div class="ksm-sample-price">€' + sample.price.toFixed(2) + '</div>';
+            }
+            
             html += '</div>';
             
             return html;
         },
         
-        // Toggle sample selection
+        // Toggle sample selection (updated with price calculation)
         toggleSample: function($sample) {
             var sampleId = $sample.data('sample-id');
+            var samplePrice = parseFloat($sample.data('price')) || 0;
             var index = this.selectedSamples.indexOf(sampleId);
             
             if (index > -1) {
@@ -265,6 +495,23 @@
             }
             
             this.updateSelectionCount();
+            this.updateTotalPrice();
+        },
+        
+        // Update total price
+        updateTotalPrice: function() {
+            var total = 0;
+            var self = this;
+            
+            $('.ksm-sample-item.selected').each(function() {
+                var price = parseFloat($(this).data('price')) || 0;
+                total += price;
+            });
+            
+            // Update price display if exists
+            if ($('.ksm-selection-price').length) {
+                $('.ksm-selection-price').html('Totaal: €' + total.toFixed(2));
+            }
         },
         
         // Update selection count
@@ -273,9 +520,9 @@
             
             // Enable/disable add to cart button
             if (this.selectedSamples.length > 0) {
-                this.addToCartBtn.prop('disabled', false);
+                $('#ksm-add-to-cart').prop('disabled', false);
             } else {
-                this.addToCartBtn.prop('disabled', true);
+                $('#ksm-add-to-cart').prop('disabled', true);
             }
         },
         
@@ -353,7 +600,7 @@
             var container = $('#ksm-cart-container');
             container.empty();
             
-            if (data.items.length === 0) {
+            if (!data.items || data.items.length === 0) {
                 container.html('<p>Je winkelwagen is leeg.</p>');
                 $('#ksm-cart-total').text(ksm_ajax.currency + '0,00');
                 return;
@@ -444,6 +691,12 @@
         
         // Show notification
         showNotification: function(message, type) {
+            // Create notification if not exists
+            if (this.notification.length === 0) {
+                $('body').append('<div id="ksm-notification" class="ksm-notification"><div class="ksm-notification-content"><span class="ksm-notification-icon"></span><span class="ksm-notification-message"></span></div></div>');
+                this.notification = $('#ksm-notification');
+            }
+            
             var $notification = this.notification;
             var $message = $notification.find('.ksm-notification-message');
             var $icon = $notification.find('.ksm-notification-icon');
@@ -487,9 +740,10 @@
         }
     };
     
-    // Initialize when DOM is ready
-    $(document).ready(function() {
-        KSM.init();
-    });
+    // Global reference
+    window.KSM = KSM;
+    
+    // Initialize
+    KSM.init();
     
 })(jQuery);

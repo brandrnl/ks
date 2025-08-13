@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
 class KSM_Admin {
     
     public function __construct() {
-        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_menu', array($this, 'add_admin_menu'), 1000); // Late priority om na post type registratie te komen
         add_action('admin_init', array($this, 'register_settings'));
         
         // Category custom fields
@@ -28,29 +28,32 @@ class KSM_Admin {
     }
     
     /**
-     * Add admin menu
+     * Add admin menu - onder het Kleurstalen hoofdmenu
      */
     public function add_admin_menu() {
+        // Instellingen pagina onder Kleurstalen menu
         add_submenu_page(
-            'woocommerce',
+            'edit.php?post_type=kleurstaal', // Parent menu
             __('Kleurstalen Instellingen', 'kleurstalen-manager'),
-            __('Kleurstalen Instellingen', 'kleurstalen-manager'),
+            __('Instellingen', 'kleurstalen-manager'),
             'manage_options',
             'ksm-settings',
             array($this, 'settings_page')
         );
         
+        // Statistieken pagina
         add_submenu_page(
-            'woocommerce',
+            'edit.php?post_type=kleurstaal',
             __('Kleurstalen Statistieken', 'kleurstalen-manager'),
-            __('Kleurstalen Stats', 'kleurstalen-manager'),
+            __('Statistieken', 'kleurstalen-manager'),
             'manage_options',
             'ksm-statistics',
             array($this, 'statistics_page')
         );
         
+        // Import/Export pagina
         add_submenu_page(
-            'woocommerce',
+            'edit.php?post_type=kleurstaal',
             __('Kleurstalen Import/Export', 'kleurstalen-manager'),
             __('Import/Export', 'kleurstalen-manager'),
             'manage_options',
@@ -137,7 +140,7 @@ class KSM_Admin {
                                 <input type="checkbox" 
                                        name="ksm_discount_enabled" 
                                        value="1" 
-                                       <?php checked(get_option('ksm_discount_enabled', true), true); ?> />
+                                       <?php checked(get_option('ksm_discount_enabled', 1), 1); ?> />
                                 <?php _e('Genereer kortingscode na bestelling', 'kleurstalen-manager'); ?>
                             </label>
                             <p class="description">
@@ -169,7 +172,7 @@ class KSM_Admin {
                                 <input type="checkbox" 
                                        name="ksm_send_confirmation_email" 
                                        value="1" 
-                                       <?php checked(get_option('ksm_send_confirmation_email', true), true); ?> />
+                                       <?php checked(get_option('ksm_send_confirmation_email', 1), 1); ?> />
                                 <?php _e('Stuur bevestigingsemail voor kleurstalen bestelling', 'kleurstalen-manager'); ?>
                             </label>
                         </td>
@@ -234,7 +237,7 @@ class KSM_Admin {
         $total_orders = 0;
         $total_revenue = 0;
         
-        if ($product_id) {
+        if ($product_id && class_exists('WC_Product')) {
             $product = wc_get_product($product_id);
             if ($product) {
                 $total_orders = $product->get_total_sales();
@@ -268,7 +271,15 @@ class KSM_Admin {
                 <div class="ksm-stat-box">
                     <h3><?php _e('Totaal Bestellingen', 'kleurstalen-manager'); ?></h3>
                     <p class="ksm-stat-number"><?php echo $total_orders; ?></p>
-                    <p class="ksm-stat-sub"><?php echo wc_price($total_revenue); ?> <?php _e('omzet', 'kleurstalen-manager'); ?></p>
+                    <p class="ksm-stat-sub">
+                        <?php 
+                        if (function_exists('wc_price')) {
+                            echo wc_price($total_revenue);
+                        } else {
+                            echo '€' . number_format($total_revenue, 2, ',', '.');
+                        }
+                        ?> <?php _e('omzet', 'kleurstalen-manager'); ?>
+                    </p>
                 </div>
                 
                 <div class="ksm-stat-box">
@@ -281,7 +292,11 @@ class KSM_Admin {
                     <p class="ksm-stat-number">
                         <?php
                         $avg = $total_orders > 0 ? round($total_revenue / $total_orders, 2) : 0;
-                        echo wc_price($avg);
+                        if (function_exists('wc_price')) {
+                            echo wc_price($avg);
+                        } else {
+                            echo '€' . number_format($avg, 2, ',', '.');
+                        }
                         ?>
                     </p>
                 </div>
@@ -329,7 +344,7 @@ class KSM_Admin {
                 )
             ));
             
-            if ($coupons) : ?>
+            if ($coupons && class_exists('WC_Coupon')) : ?>
                 <table class="wp-list-table widefat fixed striped">
                     <thead>
                         <tr>
@@ -345,7 +360,15 @@ class KSM_Admin {
                             ?>
                             <tr>
                                 <td><code><?php echo $coupon->get_code(); ?></code></td>
-                                <td><?php echo wc_price($coupon->get_amount()); ?></td>
+                                <td>
+                                    <?php 
+                                    if (function_exists('wc_price')) {
+                                        echo wc_price($coupon->get_amount());
+                                    } else {
+                                        echo '€' . number_format($coupon->get_amount(), 2, ',', '.');
+                                    }
+                                    ?>
+                                </td>
                                 <td>
                                     <?php
                                     if ($coupon->get_usage_count() >= $coupon->get_usage_limit()) {
@@ -480,13 +503,19 @@ class KSM_Admin {
         <div class="form-field">
             <label for="category_icon"><?php _e('Icon Class', 'kleurstalen-manager'); ?></label>
             <input type="text" name="category_icon" id="category_icon" value="">
-            <p class="description"><?php _e('FontAwesome of Dashicons class', 'kleurstalen-manager'); ?></p>
+            <p class="description"><?php _e('FontAwesome of Dashicons class (bijv: dashicons-admin-appearance)', 'kleurstalen-manager'); ?></p>
         </div>
         
         <div class="form-field">
             <label for="category_image"><?php _e('Afbeelding URL', 'kleurstalen-manager'); ?></label>
             <input type="text" name="category_image" id="category_image" value="">
             <button type="button" class="button ksm-upload-image"><?php _e('Upload', 'kleurstalen-manager'); ?></button>
+        </div>
+        
+        <div class="form-field">
+            <label for="category_order"><?php _e('Sorteer volgorde', 'kleurstalen-manager'); ?></label>
+            <input type="number" name="category_order" id="category_order" value="0" min="0">
+            <p class="description"><?php _e('Lager nummer = hoger in lijst', 'kleurstalen-manager'); ?></p>
         </div>
         <?php
     }
@@ -497,12 +526,13 @@ class KSM_Admin {
     public function edit_category_fields($term) {
         $icon = get_term_meta($term->term_id, 'category_icon', true);
         $image = get_term_meta($term->term_id, 'category_image', true);
+        $order = get_term_meta($term->term_id, 'category_order', true);
         ?>
         <tr class="form-field">
             <th scope="row"><label for="category_icon"><?php _e('Icon Class', 'kleurstalen-manager'); ?></label></th>
             <td>
                 <input type="text" name="category_icon" id="category_icon" value="<?php echo esc_attr($icon); ?>">
-                <p class="description"><?php _e('FontAwesome of Dashicons class', 'kleurstalen-manager'); ?></p>
+                <p class="description"><?php _e('FontAwesome of Dashicons class (bijv: dashicons-admin-appearance)', 'kleurstalen-manager'); ?></p>
             </td>
         </tr>
         
@@ -511,6 +541,18 @@ class KSM_Admin {
             <td>
                 <input type="text" name="category_image" id="category_image" value="<?php echo esc_attr($image); ?>">
                 <button type="button" class="button ksm-upload-image"><?php _e('Upload', 'kleurstalen-manager'); ?></button>
+                <?php if ($image) : ?>
+                    <br><br>
+                    <img src="<?php echo esc_url($image); ?>" style="max-width: 200px; height: auto;">
+                <?php endif; ?>
+            </td>
+        </tr>
+        
+        <tr class="form-field">
+            <th scope="row"><label for="category_order"><?php _e('Sorteer volgorde', 'kleurstalen-manager'); ?></label></th>
+            <td>
+                <input type="number" name="category_order" id="category_order" value="<?php echo esc_attr($order ?: 0); ?>" min="0">
+                <p class="description"><?php _e('Lager nummer = hoger in lijst', 'kleurstalen-manager'); ?></p>
             </td>
         </tr>
         <?php
@@ -527,6 +569,10 @@ class KSM_Admin {
         if (isset($_POST['category_image'])) {
             update_term_meta($term_id, 'category_image', esc_url_raw($_POST['category_image']));
         }
+        
+        if (isset($_POST['category_order'])) {
+            update_term_meta($term_id, 'category_order', intval($_POST['category_order']));
+        }
     }
     
     /**
@@ -535,7 +581,7 @@ class KSM_Admin {
     public function add_dashboard_widget() {
         wp_add_dashboard_widget(
             'ksm_dashboard_widget',
-            __('Kleurstalen Overzicht', 'kleurstalen-manager'),
+            __('📦 Kleurstalen Overzicht', 'kleurstalen-manager'),
             array($this, 'dashboard_widget')
         );
     }
@@ -547,7 +593,7 @@ class KSM_Admin {
         $product_id = get_option('ksm_sample_product_id');
         $total_orders = 0;
         
-        if ($product_id) {
+        if ($product_id && class_exists('WC_Product')) {
             $product = wc_get_product($product_id);
             if ($product) {
                 $total_orders = $product->get_total_sales();
@@ -575,6 +621,9 @@ class KSM_Admin {
         <p>
             <a href="<?php echo admin_url('admin.php?page=ksm-statistics'); ?>" class="button">
                 <?php _e('Bekijk statistieken', 'kleurstalen-manager'); ?>
+            </a>
+            <a href="<?php echo admin_url('post-new.php?post_type=kleurstaal'); ?>" class="button">
+                <?php _e('Nieuwe kleurstaal', 'kleurstalen-manager'); ?>
             </a>
         </p>
         <?php
@@ -655,16 +704,139 @@ class KSM_Admin {
     }
     
     /**
-     * Export samples
+     * Export samples to CSV
      */
     private function export_samples() {
-        // Implementation here
+        // Set headers voor CSV download
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename=kleurstalen-export-' . date('Y-m-d') . '.csv');
+        
+        // Open output stream
+        $output = fopen('php://output', 'w');
+        
+        // UTF-8 BOM voor Excel
+        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+        
+        // Headers
+        fputcsv($output, array(
+            'title',
+            'sku',
+            'description',
+            'category',
+            'material',
+            'colors',
+            'active',
+            'popular',
+            'sort_order'
+        ));
+        
+        // Get samples
+        $samples = get_posts(array(
+            'post_type' => 'kleurstaal',
+            'posts_per_page' => -1,
+            'post_status' => 'any'
+        ));
+        
+        foreach ($samples as $sample) {
+            $categories = wp_get_post_terms($sample->ID, 'kleurstaal_category', array('fields' => 'names'));
+            $colors = get_post_meta($sample->ID, '_ksm_colors', true);
+            
+            fputcsv($output, array(
+                $sample->post_title,
+                get_post_meta($sample->ID, '_ksm_sku', true),
+                get_post_meta($sample->ID, '_ksm_description', true),
+                implode(',', $categories),
+                get_post_meta($sample->ID, '_ksm_material', true),
+                is_array($colors) ? implode('|', $colors) : '',
+                get_post_meta($sample->ID, '_ksm_active', true) ? '1' : '0',
+                get_post_meta($sample->ID, '_ksm_popular', true) ? '1' : '0',
+                get_post_meta($sample->ID, '_ksm_sort_order', true)
+            ));
+        }
+        
+        fclose($output);
+        exit;
     }
     
     /**
-     * Import samples
+     * Import samples from CSV
      */
     private function import_samples() {
-        // Implementation here
+        if (!isset($_FILES['ksm_import_file'])) {
+            add_settings_error('ksm_messages', 'ksm_message', __('Geen bestand geüpload', 'kleurstalen-manager'), 'error');
+            return;
+        }
+        
+        $file = $_FILES['ksm_import_file'];
+        
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            add_settings_error('ksm_messages', 'ksm_message', __('Upload fout', 'kleurstalen-manager'), 'error');
+            return;
+        }
+        
+        $handle = fopen($file['tmp_name'], 'r');
+        if (!$handle) {
+            add_settings_error('ksm_messages', 'ksm_message', __('Kon bestand niet openen', 'kleurstalen-manager'), 'error');
+            return;
+        }
+        
+        // Skip header row
+        $header = fgetcsv($handle);
+        
+        $imported = 0;
+        while (($data = fgetcsv($handle)) !== FALSE) {
+            if (count($data) < 9) continue;
+            
+            // Create post
+            $post_id = wp_insert_post(array(
+                'post_title' => sanitize_text_field($data[0]),
+                'post_type' => 'kleurstaal',
+                'post_status' => 'publish'
+            ));
+            
+            if ($post_id) {
+                // Set meta
+                update_post_meta($post_id, '_ksm_sku', sanitize_text_field($data[1]));
+                update_post_meta($post_id, '_ksm_description', sanitize_textarea_field($data[2]));
+                update_post_meta($post_id, '_ksm_material', sanitize_text_field($data[4]));
+                
+                // Colors
+                if (!empty($data[5])) {
+                    $colors = array_map('sanitize_hex_color', explode('|', $data[5]));
+                    update_post_meta($post_id, '_ksm_colors', $colors);
+                }
+                
+                update_post_meta($post_id, '_ksm_active', $data[6] === '1' ? '1' : '0');
+                update_post_meta($post_id, '_ksm_popular', $data[7] === '1' ? '1' : '0');
+                update_post_meta($post_id, '_ksm_sort_order', intval($data[8]));
+                
+                // Category
+                if (!empty($data[3])) {
+                    $categories = array_map('trim', explode(',', $data[3]));
+                    $term_ids = array();
+                    foreach ($categories as $cat_name) {
+                        $term = term_exists($cat_name, 'kleurstaal_category');
+                        if (!$term) {
+                            $term = wp_insert_term($cat_name, 'kleurstaal_category');
+                        }
+                        if (!is_wp_error($term)) {
+                            $term_ids[] = is_array($term) ? $term['term_id'] : $term;
+                        }
+                    }
+                    if (!empty($term_ids)) {
+                        wp_set_post_terms($post_id, $term_ids, 'kleurstaal_category');
+                    }
+                }
+                
+                $imported++;
+            }
+        }
+        
+        fclose($handle);
+        
+        add_settings_error('ksm_messages', 'ksm_message', 
+            sprintf(__('%d kleurstalen geïmporteerd', 'kleurstalen-manager'), $imported), 
+            'success'
+        );
     }
 }
